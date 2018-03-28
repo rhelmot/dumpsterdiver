@@ -1,16 +1,20 @@
 import gc
 import traceback
-import weakref
+import types
 from pprint import pformat, pprint
 
 from prompt_toolkit import prompt
 from prompt_toolkit.token import Token
 from prompt_toolkit.styles import style_from_dict
 from prompt_toolkit.shortcuts import print_tokens
-import pygments
 
 SEQUENCE_TYPES = [list, set, tuple]
 MAPPING_TYPES = [dict]
+MAGIC_HOLDER = [object()]
+# the magic object is a unique object that we toss into gc.get_referrers to
+# identify which object gc.get_referrer is returning which is actually the
+# tuple of objects that are the args to gc.get_referrer. we hold it in a list
+# so we can easily isolate which results need to be discarded by its inclusion.
 
 def search(ty_filter):
     all_objects = [x for x in gc.get_objects() if ty_filter in repr(type(x))]
@@ -28,13 +32,13 @@ def start():
             mark_mine(hist[type(x)])
     return _main(SearchGarbage(hist, 'Histogram of types in memory', sort=lambda x: -len(hist[x])))
 
-def _main(search):
+def _main(dumpster):
     try:
-        search.run()
+        dumpster.run()
         return None
     except ReturnException as e:
         return e.value
-    except:
+    except: # pylint: disable=bare-except
         #import ipdb, sys; ipdb.post_mortem(sys.exc_info()[2])
         traceback.print_exc()
         return None
@@ -48,34 +52,27 @@ class BreakException(Exception):
     pass
 class ReturnException(Exception):
     def __init__(self, v):
+        super(ReturnException, self).__init__()
         self.value = v
 
 mine = []
-# this doesn't work because you can't take a weakref to a list?
 
-#def mark_mine(obj):
-#    mine.append(weakref.ref(obj))
-#
-#def is_mine(obj):
-#    dead = []
-#    out = False
-#    for i, m in enumerate(mine):
-#        if m() is None:
-#            dead.append(i)
-#        elif m() is obj:
-#            out = True
-#            break
-#
-#    for sofar, i in enumerate(dead):
-#        mine.pop(i - sofar)
-#    return out
 def mark_mine(obj):
     mine.append(obj)
-def is_mine(obj): # this needs to be improved to figure out which objects are internal to gc
+    return obj
+
+def is_mine(obj):
+    if obj is mine or obj is MAGIC_HOLDER or obj is MAGIC_HOLDER[0]:
+        return True
+    if type(obj) is tuple and len(obj) > 0 and obj[-1] is MAGIC_HOLDER[0]:
+        return True
+    if type(obj) is types.FrameType and obj.f_code.co_filename.endswith('dive.py'):
+        return True
     for m in mine:
         if m is obj:
             return True
     return False
+
 def clear_mine():
     global mine
     mine = []
@@ -84,6 +81,7 @@ def clear_mine():
 our_style = style_from_dict({
     Token.Prompt:   '#209000 bold',
     Token.Number:   '#ff0000 bold',
+    Token.Error:    '#ffff00 bold',
     Token.Key:      '#ff8888',
 })
 
@@ -131,9 +129,17 @@ class SearchGarbage(object):
                 ], style=our_style)
         self.last_offset = offset + count
 
-    def deeper(self, body, context):
-        search = SearchGarbage(body, context)
-        search.run()
+    def deeper(self, body, context, failure_advice):
+        dumpster = SearchGarbage(body, context)
+        if len(dumpster.values) > 0:
+            dumpster.run()
+            self.list_items(self.last_offset - 10)
+        else:
+            print_tokens([
+                (Token.Error, 'There are no objects in this view!\n'),
+                (Token, failure_advice),
+                (Token, '\n'),
+            ], style=our_style)
 
     def validate_idx(self, idx):
         try:
@@ -159,7 +165,7 @@ class SearchGarbage(object):
             print 'Not a key!'
             raise ContinueException()
 
-    def get_prompt_tokens(self, cli):
+    def get_prompt_tokens(self, cli): # pylint: disable=unused-argument
         return [(Token.Prompt, u'%s: ' % self.context)]
 
     def run(self):
@@ -186,9 +192,9 @@ class SearchGarbage(object):
             except ContinueException:
                 continue
             except BreakException:
-                return None
+                return True
 
-    def cmd_help(self, *args):
+    def cmd_help(self, *args): # pylint: disable=unused-argument,no-self-use
         print 'help - show this message'
         print 'list [n] - show 10 items from the list at index n'
         print 'show n - show detail of item at index or key n'
@@ -235,7 +241,7 @@ class SearchGarbage(object):
             print 'Syntax: refs n'
             raise ContinueException()
 
-        self.deeper(gc.get_referrers(self.values[idx]), 'Objects referring to %s' % meaningful_repr(self.values[idx]))
+        self.deeper(gc.get_referrers(self.values[idx], MAGIC_HOLDER[0]), 'Objects referring to %s' % meaningful_repr(self.values[idx]), 'The object may be interned and have some refs hidden.')
 
     def cmd_down(self, *args):
         if len(args) == 1:
@@ -244,7 +250,7 @@ class SearchGarbage(object):
             print 'Syntax: down n'
             raise ContinueException()
 
-        self.deeper(self.values[idx], 'Objects referred to by %s' % meaningful_repr(self.values[idx]))
+        self.deeper(self.values[idx], 'Objects referred to by %s' % meaningful_repr(self.values[idx]), 'Try looking at a non-empty object')
 
     def cmd_return(self, *args):
         if len(args) == 1:
@@ -255,10 +261,10 @@ class SearchGarbage(object):
 
         raise ReturnException(self.values[idx])
 
-    def cmd_up(self, *args):
+    def cmd_up(self, *args): # pylint: disable=unused-argument,no-self-use
         raise BreakException()
 
-    def cmd_quit(self, *args):
+    def cmd_quit(self, *args): # pylint: disable=unused-argument,no-self-use
         raise ReturnException(None)
 
 def meaningful_repr(x):

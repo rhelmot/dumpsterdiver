@@ -11,13 +11,13 @@ Then, to detox, I learned `prompt_toolkit` and made the prompt pretty.
 
 from setuptools import setup
 setup(name='dive',
-      version='0.1',
+      version='0.2',
       py_modules=['dive'],
       install_requires=['prompt_toolkit'],
-      author_email='andrewrdutcher@gmail.com',
+      author_email='audrey@rhelmot.io',
       author='rhelmot',
       url='https://github.com/rhelmot/dumpsterdiver',
       description='A tool for interactively traversing the python heap to find memory leaks',
       license='MIT',
-      keywords='heap memory leak interative',
+      keywords='heap memory leak interative garbage explore',
 )
