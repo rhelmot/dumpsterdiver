@@ -4,9 +4,10 @@ import types
 from pprint import pformat, pprint
 
 from prompt_toolkit import prompt
-from prompt_toolkit.token import Token
-from prompt_toolkit.styles import style_from_dict
-from prompt_toolkit.shortcuts import print_tokens
+from pygments.token import Token
+from prompt_toolkit import print_formatted_text
+from prompt_toolkit.formatted_text import PygmentsTokens
+from prompt_toolkit.styles import Style
 
 SEQUENCE_TYPES = [list, set, tuple]
 MAPPING_TYPES = [dict]
@@ -78,14 +79,18 @@ def clear_mine():
     mine = []
 
 # styling stuff... why is this difficult
-our_style = style_from_dict({
-    Token.Prompt:   '#209000 bold',
-    Token.Number:   '#ff0000 bold',
-    Token.Error:    '#ffff00 bold',
-    Token.Key:      '#ff8888',
+our_style = Style.from_dict({
+    'prompt':             '#209000 bold',
+    'pygments.number':   '#ff0000 bold',
+    'pygments.error':    '#ffff00 bold',
+    'pygments.key':      '#ff8888',
 })
 
-class SearchGarbage(object):
+def print_tokens(tokens):
+    print_formatted_text(PygmentsTokens(tokens), style=our_style)
+
+
+class SearchGarbage(object): # pylint: disable=useless-object-inheritance
     def __init__(self, body, context, sort=None):
         self.idx_mode = type(body) in SEQUENCE_TYPES
         self.dict_mode = type(body) in MAPPING_TYPES
@@ -110,7 +115,7 @@ class SearchGarbage(object):
     def list_items(self, offset=None, count=10):
         if offset is None:
             offset = self.last_offset
-        for i in xrange(offset, min(offset + count, len(self.values))):
+        for i in range(offset, min(offset + count, len(self.values))):
             if self.keys is not None:
                 print_tokens([
                     (Token.Number, str(i)),
@@ -118,15 +123,13 @@ class SearchGarbage(object):
                     (Token.Key, str(self.keys[i])),
                     (Token, ' => '),
                     (Token, meaningful_repr(self.values[i])),
-                    (Token, '\n'),
-                ], style=our_style)
+                ])
             else:
                 print_tokens([
                     (Token.Number, str(i)),
                     (Token, ': '),
                     (Token, meaningful_repr(self.values[i])),
-                    (Token, '\n'),
-                ], style=our_style)
+                ])
         self.last_offset = offset + count
 
     def deeper(self, body, context, failure_advice):
@@ -138,17 +141,16 @@ class SearchGarbage(object):
             print_tokens([
                 (Token.Error, 'There are no objects in this view!\n'),
                 (Token, failure_advice),
-                (Token, '\n'),
-            ], style=our_style)
+            ])
 
     def validate_idx(self, idx):
         try:
             idx = int(idx)
         except ValueError:
-            print 'Not an index!'
+            print('Not an index!')
             raise ContinueException()
         if idx < 0 or idx >= len(self.values):
-            print 'Not in range!'
+            print('Not in range!')
             raise ContinueException()
         return idx
 
@@ -157,16 +159,13 @@ class SearchGarbage(object):
             return self.validate_idx(key)
 
         for i, maybe in enumerate(self.keys):
-            if type(maybe) in (str, unicode) and maybe == key:
+            if type(maybe) is str and maybe == key:
                 return i
         if key.isdigit():
             return self.validate_idx(key)
         else:
-            print 'Not a key!'
+            print('Not a key!')
             raise ContinueException()
-
-    def get_prompt_tokens(self, cli): # pylint: disable=unused-argument
-        return [(Token.Prompt, u'%s: ' % self.context)]
 
     def run(self):
         self.last_offset = 0
@@ -175,7 +174,7 @@ class SearchGarbage(object):
 
         while True:
             try:
-                opt = prompt(get_prompt_tokens=self.get_prompt_tokens, style=our_style)
+                opt = prompt([('class:prompt', u'%s: ' % self.context)], style=our_style)
                 if opt == '':
                     if last_cmd is None:
                         continue
@@ -185,7 +184,7 @@ class SearchGarbage(object):
 
                 args = opt.split()
                 if len(args) == 0 or not hasattr(self, 'cmd_' + args[0]):
-                    print 'Not a command. Type "help" for help.'
+                    print('Not a command. Type "help" for help.')
                 else:
                     getattr(self, 'cmd_' + args[0])(*args[1:])
 
@@ -195,15 +194,15 @@ class SearchGarbage(object):
                 return True
 
     def cmd_help(self, *args): # pylint: disable=unused-argument,no-self-use
-        print 'help - show this message'
-        print 'list [n] - show 10 items from the list at index n'
-        print 'show n - show detail of item at index or key n'
-        print 'fullshow n - show ALL detail of item at index or key n'
-        print 'refs n - explore objects that refer to item at index or key n'
-        print 'down n - explore objects that the object at index or key n refers to'
-        print 'return n - pick item at index or key n'
-        print 'up - cancel selection'
-        print 'quit - abort everything'
+        print('help - show this message')
+        print('list [n] - show 10 items from the list at index n')
+        print('show n - show detail of item at index or key n')
+        print('fullshow n - show ALL detail of item at index or key n')
+        print('refs n - explore objects that refer to item at index or key n')
+        print('down n - explore objects that the object at index or key n refers to')
+        print('return n - pick item at index or key n')
+        print('up - cancel selection')
+        print('quit - abort everything')
 
     def cmd_list(self, *args):
         if len(args) == 1:
@@ -211,7 +210,7 @@ class SearchGarbage(object):
         elif len(args) == 0:
             idx = None
         else:
-            print 'Syntax: list [n]'
+            print('Syntax: list [n]')
             raise ContinueException()
 
         self.list_items(idx)
@@ -220,16 +219,16 @@ class SearchGarbage(object):
         if len(args) == 1:
             idx = self.validate_key(args[0])
         else:
-            print 'Syntax: show n'
+            print('Syntax: show n')
             raise ContinueException()
 
-        print safe_repr(self.values[idx])
+        print(safe_repr(self.values[idx]))
 
     def cmd_fullshow(self, *args):
         if len(args) == 1:
             idx = self.validate_key(args[0])
         else:
-            print 'Syntax: fullshow n'
+            print('Syntax: fullshow n')
             raise ContinueException()
 
         pprint(self.values[idx])
@@ -238,7 +237,7 @@ class SearchGarbage(object):
         if len(args) == 1:
             idx = self.validate_key(args[0])
         else:
-            print 'Syntax: refs n'
+            print('Syntax: refs n')
             raise ContinueException()
 
         self.deeper(gc.get_referrers(self.values[idx], MAGIC_HOLDER[0]), 'Objects referring to %s' % meaningful_repr(self.values[idx]), 'The object may be interned and have some refs hidden.')
@@ -247,7 +246,7 @@ class SearchGarbage(object):
         if len(args) == 1:
             idx = self.validate_key(args[0])
         else:
-            print 'Syntax: down n'
+            print('Syntax: down n')
             raise ContinueException()
 
         self.deeper(self.values[idx], 'Objects referred to by %s' % meaningful_repr(self.values[idx]), 'Try looking at a non-empty object')
@@ -256,7 +255,7 @@ class SearchGarbage(object):
         if len(args) == 1:
             idx = self.validate_key(args[0])
         else:
-            print 'Syntax: return n'
+            print('Syntax: return n')
             raise ContinueException()
 
         raise ReturnException(self.values[idx])
