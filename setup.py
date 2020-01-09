@@ -11,7 +11,7 @@ Then, to detox, I learned `prompt_toolkit` and made the prompt pretty.
 
 from setuptools import setup
 setup(name='dive',
-      version='0.2',
+      version='0.3',
       py_modules=['dive'],
       install_requires=['prompt_toolkit'],
       author_email='audrey@rhelmot.io',
