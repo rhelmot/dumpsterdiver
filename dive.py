@@ -288,16 +288,20 @@ def shorten(seq):
     first = True
     for key in seq:
         if first:
-            out += repr(key)
+            out += safe_repr(key)
             first = False
         else:
-            out += ', ' + repr(key)
+            out += ', ' + safe_repr(key)
         if len(out) > 50:
             return out[:50] + '...]'
     return out + ']'
 
 def safe_repr(x):
-    r = pformat(x)
+    try:
+        r = pformat(x)
+    except Exception:
+        # Fall back to using only the class name
+        r = "[{}] (repr failed)".format(x.__class__)
     if len(r) > 10**4:
         r = r[:10**4] + '...'
     if len(r.splitlines()) > 50:
