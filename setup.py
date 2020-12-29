@@ -13,7 +13,7 @@ from setuptools import setup
 setup(name='dive',
       version='0.3',
       py_modules=['dive'],
-      install_requires=['prompt_toolkit'],
+      install_requires=['prompt_toolkit, Pygments'],
       author_email='audrey@rhelmot.io',
       author='rhelmot',
       url='https://github.com/rhelmot/dumpsterdiver',
